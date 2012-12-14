@@ -8,7 +8,7 @@ object BuildSettings {
 
     val buildOrganization = "com.typesafe"
     val buildVersion = "1.0"
-    val buildScalaVersion = "2.9.0-1"
+    val buildScalaVersion = "2.9.1"
 
     val globalSettings = Seq(
         organization := buildOrganization,
@@ -17,12 +17,14 @@ object BuildSettings {
         scalacOptions += "-deprecation",
         fork in test := true,
         libraryDependencies ++= Seq(slf4jSimpleTest, scalatest, jettyServerTest),
-        resolvers := Seq(jbossRepo, akkaRepo, sonatypeRepo))
+        resolvers := Seq(typesafeRepo, scalaToolsRepo, jbossRepo,
+                         akkaRepo, sonatypeRepo))
 
     val projectSettings = Defaults.defaultSettings ++ globalSettings
 }
 
 object Resolvers {
+    val typesafeRepo =  "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases"
     val sonatypeRepo = "Sonatype Release" at "http://oss.sonatype.org/content/repositories/releases"
     val jbossRepo = "JBoss" at "http://repository.jboss.org/nexus/content/groups/public/"
     val akkaRepo = "Akka" at "http://repo.akka.io/repository/"
