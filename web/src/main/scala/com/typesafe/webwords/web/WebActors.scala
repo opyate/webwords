@@ -40,7 +40,16 @@ class WordsActor(config: WebWordsConfig) extends Actor {
         cacheHit: Boolean, startTime: Long)
 
     private def form(url: String, skipCache: Boolean, badUrl: Boolean = false) = {
-        <div>
+      val css = scala.xml.Unparsed("""
+    bottom:0;
+    position:fixed;
+    z-index:150;
+    _position:absolute;
+    _top:expression(eval(document.documentElement.scrollTop+
+        (document.documentElement.clientHeight-this.offsetHeight)));
+    height:80px;
+          """)
+        <div style={css}>
             <form action="/words" method="get">
                 <fieldset>
                     <div>
@@ -67,59 +76,12 @@ class WordsActor(config: WebWordsConfig) extends Actor {
         </div>
     }
 
-    private def results(url: String, index: Index, cacheHit: Boolean, elapsed: Long) = {
-        // world's ugliest word cloud!
-        def countToStyle(count: Int) = {
-            val maxCount = (index.wordCounts.headOption map { _._2 }).getOrElse(1)
-            val font = 6 + ((count.doubleValue / maxCount.doubleValue) * 24).intValue
-            Attribute("style", xml.Text("font-size: " + font + "pt;"), xml.Null)
-        }
-
-        <div>
-            <p>
-                <a href={ url }>{ url }</a>
-                spidered and indexed.
-            </p>
-            <p>{ elapsed }ms elapsed.</p>
-            <p>{ index.links.size } links scraped.</p>
-            {
-                if (cacheHit)
-                    <p>Results were retrieved from cache.</p>
-                else
-                    <p>Results newly-spidered (not from cache).</p>
-            }
-        </div>
-        <h3>Word Counts</h3>
-        <div style="max-width: 600px; margin-left: 100px; margin-top: 20px; margin-bottom: 20px;">
-            {
-                val nodes = xml.NodeSeq.newBuilder
-                for ((word, count) <- index.wordCounts) {
-                    nodes += <span title={ count.toString }>{ word }</span> % countToStyle(count)
-                    nodes += xml.Text(" ")
-                }
-                nodes.result
-            }
-        </div>
-        <div style="font-size: small">(hover to see counts)</div>
-        <h3>Links Found</h3>
-        <div style="margin-left: 50px;">
-            <ol>
-                {
-                    val nodes = xml.NodeSeq.newBuilder
-                    for ((text, url) <- index.links)
-                        nodes += <li><a href={ url }>{ text }</a></li>
-                    nodes.result
-                }
-            </ol>
-        </div>
-    }
-
     def wordsPage(formNode: xml.NodeSeq, resultsNode: xml.NodeSeq) = {
         <html>
             <head>
                 <title>Web Words!</title>
             </head>
-            <body style="max-width: 800px;">
+            <body>
                 <div>
                     <div>
                         { formNode }
@@ -145,7 +107,8 @@ class WordsActor(config: WebWordsConfig) extends Actor {
         val elapsed = System.currentTimeMillis - finish.startTime
         finish match {
             case Finish(request, url, Some(index), cacheHit, startTime) =>
-                val html = wordsPage(form(url, skipCache = false), results(url, index, cacheHit, elapsed))
+                //val html = wordsPage(form(url, skipCache = false), Results.resultsv2(url, index, cacheHit, elapsed))
+                val html = Results.resultsv2(url, index, cacheHit, elapsed, form(url, skipCache = false))
 
                 completeWithHtml(request, html)
 
@@ -269,4 +232,105 @@ class WebBootstrap(rootEndpoint: ActorRef, config: WebWordsConfig) extends Actor
         handlers.values foreach { _.stop }
         custom404.stop
     }
+}
+
+object Results {
+  import com.typesafe.config._
+  
+  val config = ConfigFactory.load
+  // "https://raw.github.com/opyate/pinelo/master/pinelo"
+  val scriptLocationPinelo = config.getString("script.location.pinelo")
+  
+  def resultsv1(url: String, index: Index, cacheHit: Boolean, elapsed: Long) = {
+        // world's ugliest word cloud!
+        def countToStyle(count: Int) = {
+            val maxCount = (index.wordCounts.headOption map { _._2 }).getOrElse(1)
+            val font = 6 + ((count.doubleValue / maxCount.doubleValue) * 24).intValue
+            Attribute("style", xml.Text("font-size: " + font + "pt;"), xml.Null)
+        }
+
+        <div>
+            <p>
+                <a href={ url }>{ url }</a>
+                spidered and indexed.
+            </p>
+            <p>{ elapsed }ms elapsed.</p>
+            <p>{ index.links.size } links scraped.</p>
+            {
+                if (cacheHit)
+                    <p>Results were retrieved from cache.</p>
+                else
+                    <p>Results newly-spidered (not from cache).</p>
+            }
+        </div>
+        <h3>Word Counts</h3>
+        <div style="max-width: 600px; margin-left: 100px; margin-top: 20px; margin-bottom: 20px;">
+            {
+                val nodes = xml.NodeSeq.newBuilder
+                for ((word, count) <- index.wordCounts) {
+                    nodes += <span title={ count.toString }>{ word }</span> % countToStyle(count)
+                    nodes += xml.Text(" ")
+                }
+                nodes.result
+            }
+        </div>
+        <div style="font-size: small">(hover to see counts)</div>
+        <h3>Links Found</h3>
+        <div style="margin-left: 50px;">
+            <ol>
+                {
+                    val nodes = xml.NodeSeq.newBuilder
+                    for ((text, url) <- index.links)
+                        nodes += <li><a href={ url }>{ text }</a></li>
+                    nodes.result
+                }
+            </ol>
+        </div>
+    }
+  
+  def resultsv2(url: String, index: Index, cacheHit: Boolean, elapsed: Long, formNode: xml.NodeSeq) = {
+    val (_firstWord,firstIndex) = index.wordCounts.head
+    val firstWord = if (_firstWord.size <= 5) _firstWord + "     " else _firstWord
+    
+    val brushes = scala.xml.Unparsed("""var BRUSH_INCLUDES = ["simple", "arc"];""")
+    val word = scala.xml.Unparsed("""var THEWORD = "%s";""".format(firstWord))
+    val scriptLoc = scala.xml.Unparsed("""var SCRIPTLOC = "%s";""".format(scriptLocationPinelo))
+    val css = scala.xml.Unparsed("""canvas{position: absolute;left:0;top:0;}""")
+    
+<html>
+<head>
+	<title>opyate XMAS hack 2012</title>
+	<link rel="stylesheet" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css" type="text/css" />
+	<style type="text/css">{css}</style>
+</head>
+<body>
+    
+	<div id="background-canvas">
+    </div>
+
+    {formNode}    
+
+	<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+	<script type="text/javascript" src="//code.jquery.com/ui/1.9.2/jquery-ui.js"></script>
+	<script src="//cdnjs.cloudflare.com/ajax/libs/raphael/2.1.0/raphael-min.js"></script>
+	<script src={scriptLocationPinelo + "/libre.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/mouse.js"}></script>
+	<script type="text/javascript">
+		// tell Pinelo which brush to use
+		{brushes}
+		{word}
+		{scriptLoc}
+	</script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/inheritance.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/util.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/setting.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/layer.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/brush.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/src/palette.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/hack.js"}></script>
+	<script type="text/javascript" src={scriptLocationPinelo + "/draw.js"}></script>
+</body>
+</html>
+
+  }
 }

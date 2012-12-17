@@ -17,7 +17,7 @@ object BuildSettings {
         scalacOptions += "-deprecation",
         fork in test := true,
         libraryDependencies ++= Seq(slf4jSimpleTest, scalatest, jettyServerTest),
-        resolvers := Seq(typesafeRepo, scalaToolsRepo, jbossRepo,
+        resolvers := Seq(typesafeRepo, jbossRepo,
                          akkaRepo, sonatypeRepo))
 
     val projectSettings = Defaults.defaultSettings ++ globalSettings
@@ -49,6 +49,7 @@ object Dependencies {
     val jsoup = "org.jsoup" % "jsoup" % "1.6.1"
 
     val casbahCore = "com.mongodb.casbah" %% "casbah-core" % "2.1.5-1"
+    val typesafeConfig = "com.typesafe.config" %% "config" % "0.1.7"
 }
 
 object WebWordsBuild extends Build {
@@ -80,6 +81,6 @@ object WebWordsBuild extends Build {
     lazy val common = Project("webwords-common",
                            file("common"),
                            settings = projectSettings ++
-                           Seq(libraryDependencies ++= Seq(akka, akkaAmqp, asyncHttp, casbahCore)))
+                           Seq(libraryDependencies ++= Seq(akka, akkaAmqp, asyncHttp, casbahCore, typesafeConfig)))
 }
 
